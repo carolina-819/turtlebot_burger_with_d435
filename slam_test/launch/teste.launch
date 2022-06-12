@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+
+ <node name="teste" pkg="slam_test" type="teste" output="screen"/>
+
+</launch>
