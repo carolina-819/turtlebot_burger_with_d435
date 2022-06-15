@@ -163,7 +163,7 @@
   </link>
 
   <joint name="camera_joint" type="fixed">
-    <origin xyz="0.064 -0.065 0.14" rpy="0 0 0"/>
+    <origin xyz="-0.032 0 0.20" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="realsense_link"/>
   </joint>
@@ -172,15 +172,9 @@
     <visual>
      <origin xyz="0 0 0" rpy="1.57 0 1.57"/>
     </visual>
-    <collision>
-      <origin xyz="0.003 0.065 0.007" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.012 0.132 0.020"/>
-      </geometry>
-    </collision>
   </link>
   <xacro:include filename="/home/carolina/turtle_ws/src/turtlebot3_description/urdf/_d435.urdf.xacro" />
   <xacro:sensor_d435 parent="realsense_link" name="d435" topics_ns="d435">
-    <origin xyz="-0.1 0 0" rpy="0 0 3.1456"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
   </xacro:sensor_d435>
 </robot>
