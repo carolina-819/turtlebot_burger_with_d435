@@ -14,3 +14,6 @@
 > 
 > roslaunch turtlebot3_gazebo turtlebot3_world.launch
 
+
+urdf from realsense sensor is here https://github.com/pal-robotics-forks/realsense/tree/upstream/realsense2_description/urdf
+
