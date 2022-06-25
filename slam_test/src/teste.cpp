@@ -1,7 +1,13 @@
 #include "../include/teste.h"
 #include "../include/librealsense2/rsutil.h"
 #include "../include/librealsense2/h/rs_types.h"
+#include "../include/librealsense2/h/rs_frame.h"
+#include <iostream>
+#include <fstream>
+#include "../include/matplotlibcpp.h"
+#include <opencv2/features2d.hpp>
 using namespace cv;
+using namespace matplotlibcpp;
 
 void show_wait_destroy(const char* winname, Mat img);
 void check_distance(std::vector<zone> &zonas, Point ponto, float distancia);
@@ -50,22 +56,29 @@ void cb_pcl(const sensor_msgs::PointCloud2ConstPtr &msg)
     imshow("PCL image", dilation_dst);
     waitKey(1);
 }
-void get_camera_info()
+void get_depth_camera_info()
 {
     boost::shared_ptr<sensor_msgs::CameraInfo const> sharedCameraInfo;
-
     do
     {
-        sharedCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/camera/depth/camera_info", ros::Duration(5));
+        sharedCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/d435/depth/camera_info", ros::Duration(5));
         ROS_WARN_STREAM("do");
         if (sharedCameraInfo != NULL)
         {
             cam_info = *sharedCameraInfo;
-            camera_params.cx = cam_info.K[2];
-            camera_params.fy = cam_info.K[4];
-            camera_params.cy = cam_info.K[5];
-            camera_params.fx = cam_info.K[0];
-
+            intriseco.ppx = cam_info.K[2];
+            intriseco.ppy = cam_info.K[5];
+            intriseco.fy = cam_info.K[4];
+            intriseco.fx = cam_info.K[0];
+            intriseco.height = cam_info.height;
+            intriseco.width = cam_info.width;
+            frame_depth = cam_info.header.frame_id;
+            if (cam_info.distortion_model == "plumb_bob") {
+                intriseco.model =  RS2_DISTORTION_BROWN_CONRADY;
+            }else if  (cam_info.distortion_model == "equidistant") {
+                intriseco.model = RS2_DISTORTION_KANNALA_BRANDT4;
+            }
+            
             ROS_WARN_STREAM("Width = " << cam_info.width << " Height = " << cam_info.height);
         }
         else
@@ -76,6 +89,30 @@ void get_camera_info()
     } while (sharedCameraInfo == NULL);
     ROS_WARN_STREAM("done"); // esta preso no do
 }
+
+void get_image_camera_info()
+{
+    boost::shared_ptr<sensor_msgs::CameraInfo const> sharedCameraInfo;
+    do
+    {
+        sharedCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/d435/color/camera_info", ros::Duration(5));
+        ROS_WARN_STREAM("do");
+        if (sharedCameraInfo != NULL)
+        {
+            cam_info = *sharedCameraInfo;
+           
+            frame_camera = cam_info.header.frame_id;
+            
+        }
+        else
+        {
+            ROS_ERROR("Couldn't get image camera info! Trying again...");
+            ros::Duration(1.0).sleep();
+        }
+    } while (sharedCameraInfo == NULL);
+    ROS_WARN_STREAM("done"); // esta preso no do
+}
+
 /*void check_distance(std::vector<zone> zonas, Point ponto, float distancia){
     float min_diff = 1000; //RESOLVER PROBLEMA DO ENDERENÇO
     int index = 0;
@@ -103,33 +140,128 @@ void get_camera_info()
     }
 
 }*/
-void cb_depth(const sensor_msgs::Image &msg)
+void cb_depth(const sensor_msgs::ImageConstPtr& msg)
 {
-   // std::vector<zone> zones;
-
     cv_bridge::CvImagePtr depth_image_ptr;
-    cv_bridge::CvImagePtr depth_image_to_canny;
     
     try
     {
-        depth_image_ptr = cv_bridge::toCvCopy(msg);
-        depth_image_to_canny = cv_bridge::toCvCopy(msg, "8UC1");
-
+        depth_image_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_16UC1);
     }
     catch (cv_bridge::Exception &e)
     {
         ROS_ERROR("cv_bridge exception: %s", e.what());
     }
+   
+    Mat img = depth_image_ptr->image;
+    float w = intriseco.width;
+    float h =  intriseco.height;
 
-    ROS_WARN_STREAM("TAMANHO " << depth_image_ptr->image.size());
-    imshow("image 8 bit", depth_image_ptr->image);
+    Mat graymat(h, w, CV_8UC1);
+    
+
+    double minVal, maxVal;
+    minMaxLoc(img, &minVal, &maxVal);
+    std::cout << "min: " << minVal << " max: " << maxVal << std::endl;
+
+    Mat x_coord(intriseco.height, intriseco.width, CV_32F);
+    Mat y_coord(intriseco.height, intriseco.width, CV_32F);
+    Mat z_coord(intriseco.height, intriseco.width, CV_32F);
+    
+    for(u_int16_t i = 0; i < h; i++){ //goes through rows
+        for (u_int16_t j = 0; j < w; j++){ //goes through columns
+            float pixel[2] = {i, j};
+            
+            float point[3];
+            rs2_deproject_pixel_to_point( point, &intriseco, pixel, img.at<u_int16_t>(i, j));
+            graymat.at<unsigned char>(i, j) = uchar ((img.at<u_int16_t>(i, j) * 255)/maxVal);
+         //   std::cout << "checkpoint " << point[0] << " " << point[1] << " " << point[2] << "depth " << img.at<u_int16_t>(i, j) << std::endl;
+         //   std::cout << "valor " << img.at<u_int16_t>(i, j) << std::endl;
+            x_coord.at<float>(i, j) =  point[1] * 0.001;
+            y_coord.at<float>(i, j) = point[0] * 0.001;
+            z_coord.at<float>(i, j) = point[2] * 0.001;
+          //  std::cout << "center: " << abs((i-(h/2) * img.at<u_int16_t>(j,i)) / intriseco.fy * 0.01) << "m" << std::endl;
+        }
+        
+    }
+    imshow("image grey", graymat);
     waitKey(1);
+   // ros::Publisher chatter_pub = nh.advertise<std_msgs::Image>("chatter", 1000);
+    Mat ex = img.clone();
+    imshow("image grey", graymat);
+    waitKey(1);
+    Mat cut(h, w, CV_8UC1);
+    std::vector<float> Z_points;
+    std::vector<float> X_points;
 
-    rs2_intrinsics intriseco;
-    intriseco.height = 0;
-  /*  float point[3];
+    for(int i = 0; i < w; i++){ //goes through columns
+        Mat Mi = ex.col(i).clone();
+        float min = 100000000;
+        int index = 0;
+        
+            for(int j = 0; j < h; j++){
+               // MyFile << img.at<u_int16_t>(j, i) << " ";
+               //std::cout << "valores " << img.at<u_int16_t>(j, i)  << " coluna " << Mi.at<float>(j, 0) << std::endl;
+                
+                if((y_coord.at<float>(j, i) > 0.5 || y_coord.at<float>(j, i) < -2) || img.at<u_int16_t>(j, i) == 0){
+                   cut.at<unsigned char>(j, i) = uchar (255);
+                }else{
+                    cut.at<unsigned char>(j, i) = graymat.at<unsigned char>(j, i);
+                    if( (Mi.at<u_int16_t>(j, 0) < min) && (Mi.at<u_int16_t>(j, 0) > 0) ){ 
+                    min = Mi.at<u_int16_t>(0, j);
+                    index = j;
+                }
+                }
+            }
+         //   MyFile << "\t" << "     novo" << "\t";
+
+        //std::cout << "tam: " << Mi.rows << "minimo " <<  Mi.at<float>(index, 0) << "indice " << i << "index " << index << std::endl;
+      // nao funciona  int k = std::distance(column.begin() ,  std::min_element(column.begin(), column.end()));
+        Z_points.push_back(z_coord.at<float>(index, i)*100);
+        X_points.push_back(x_coord.at<float>(index, i));
+      //  std::cout << "z points: " << Z_points[i] << std::endl;
+    }
+
+    //project into new frame
+  //  MyFile << std::endl;
+    
+
+    //METER ESTE DIST A FUNCIONAR, FAZER O MAPA DA VISAO DE TOP LEVEL. PASSAR PARA A DETETÇÃO DE OBSTACULOS COM A IMAGEM VISUAL
+  //  imshow("image cut", cut);
+  //  waitKey(1);
+
+    
+    matplotlibcpp::plot(X_points, Z_points);
+   // matplotlibcpp::ylim(0, 2);
+  //  matplotlibcpp::xlim(-1, 1);
+    matplotlibcpp::title("Standard usage"); // set a title
+  //  matplotlibcpp::show();
+  
+/*
+auto depth = rs2::get_depth_frame();
+auto depth_profile = depth.get_profile().as<rs2::video_stream_profile>();
+auto depth_intrin = depth_profile.get_intrinsics();
+
+auto color = fs.get_color_frame();
+auto color_profile = color.get_profile().as<rs2::video_stream_profile>();
+auto color_intrin = color_profile.get_intrinsics();
+
+auto extrin = depth_profile.get_extrinsics_to(color_profile);
+// Maybe color_profile.get_extrinsics_to(depth_profile); ??
+
+float xyz[3];
+float color_xyz[3];
+float ij[2] = { 100, 100 }; // Pixel indexes
+float color_ij[2]; // Matching color pixel
+
+rs2_deproject_pixel_to_point(xyz, &depth_intrin, ij, depth.get_distance(ij[0], ij[1]));
+rs2_transform_point_to_point(color_xyz, extrin, xyz);
+rs2_project_point_to_pixel(color_ij, color_intrin, color_xyz);
+ */ /*  float point[3];
     float local[2] = [0,0];
     rs2_deproject_pixel_to_point(point, &intriseco, local, depth_image_ptr->image.at(0,0))*/
+
+    //processamento de imagem com cor!
 /*
     Mat image = depth_image_ptr->image;
     Mat image_canny = depth_image_to_canny->image;
@@ -200,18 +332,22 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     //imshow("cor", depth_image_ptr->image);
    // waitKey(1);
 
-    Mat src = depth_image_ptr->image;
+    Mat src = depth_image_ptr->image.clone();
     Mat greyMat;
-    cv::cvtColor(depth_image_ptr->image, greyMat, COLOR_BGR2GRAY);
-    cv::Mat img_bw;
-    cv::threshold(greyMat, img_bw, 128.0, 255.0, THRESH_BINARY);
+    cv::cvtColor(src, greyMat, COLOR_BGR2GRAY);
+  //  cv::Mat img_bw;
+ //  cv::threshold(greyMat, img_bw, 128.0, 255.0, THRESH_BINARY);
     
-    cv::Mat edges;
-    cv::Canny(greyMat, edges, 0.7, 0.8, 3, false);
+   // cv::Mat edges;
+  //  cv::Canny(greyMat, edges, 0.7, 0.8, 3, false);
+  // resize(img_bw, img_bw, cv::Size(greyMat.cols/2, greyMat.rows/2));
     
+  //  imshow("edges", img_bw);
+
+  //  waitKey();
     // Detect blobs.
 
-    SimpleBlobDetector::Params params;
+  /*  SimpleBlobDetector::Params params;
     // Change thresholds
     params.minThreshold = 0;
     params.maxThreshold = 20000;
@@ -237,22 +373,33 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
 
     // Set up detector with params
     Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
+*/
+    // Initiate ORB detector
+    Ptr<FeatureDetector> detector = ORB::create();
+    
+    Mat descriptors;
+// find the keypoints and descriptors with ORB
+    std::vector<KeyPoint> keypoints;
+    detector->detect(src, keypoints);
+
+  //  Ptr<DescriptorExtractor> extractor = ORB::create();
+  //  extractor->compute(img_bw, keypoints, descriptors);
 
     // Detect blobs
    // detector->detect(src, keypoints);
     // Draw detected blobs as red circles.
     // DrawMatchesFlags::DRAW_RICH_KEYPOINTS flag ensures the size of the circle corresponds to the size of blob
     Mat im_with_keypoints;
-    drawKeypoints( src, keypoints, im_with_keypoints, Scalar(255,0,255), DrawMatchesFlags::DEFAULT );
-    im_with_keypoints.setTo(cv::Scalar(200, 50, 0, 255), edges);
+    drawKeypoints( src, keypoints, im_with_keypoints, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+  //  im_with_keypoints.setTo(cv::Scalar(200, 50, 0, 255), keypoints);
     
     // Show blobs
     resize(im_with_keypoints, im_with_keypoints, cv::Size(im_with_keypoints.cols/2, im_with_keypoints.rows/2));
-    
-    imshow("keypoints", im_with_keypoints );
+    resize(src, src, cv::Size(src.cols/2, src.rows/2));
+    imshow("cinzento", greyMat );
     waitKey(1);
-    resize(img_bw, img_bw, cv::Size(img_bw.cols/2, img_bw.rows/2));
-    imshow("binary", img_bw );
+    
+    imshow("keypoints", im_with_keypoints);
     waitKey(1);
 
  /*   Mat p = Mat::zeros(src.cols*src.rows, 5, CV_32F);
@@ -293,16 +440,25 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     waitKey();
 */
 }
+void cb_align( const sensor_msgs::Image &msg){
+    std::cout << "CARALHO" << std::endl;
+    cv_bridge::CvImagePtr depth_image_ptr = cv_bridge::toCvCopy(msg);
+    imshow("alinhado", depth_image_ptr->image);
+    waitKey(1);
+
+}
 int main(int argc, char **argv)
 {
-
     ros::init(argc, argv, "test");
-
     ros::NodeHandle nh;
-
+    get_depth_camera_info();
+    get_image_camera_info();
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
-    ros::Subscriber depth_sub = nh.subscribe("camera/depth/image", 1, cb_depth);
-  //  ros::Subscriber rgb_sub = nh.subscribe("camera/rgb/image_color", 1, cb_rgb);
+    
+  //  ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
+   // ros::Subscriber depth_sub = nh.subscribe("/d435/depth/image_raw", 1, cb_depth);
+    ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
+    
     while (ros::ok())
     {
         ros::spinOnce();

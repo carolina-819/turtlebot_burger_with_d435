@@ -10,6 +10,10 @@
 #include "opencv2/highgui/highgui.hpp"
 #include <iostream>
 #include <ros/console.h>
+#include <iostream>
+#include <fstream>
+#include "../include/librealsense2/h/rs_types.h"
+#include <image_transport/image_transport.h>
 
 typedef struct {
     double fx, fy;
@@ -23,8 +27,16 @@ typedef struct {
 
 camera_parameters camera_params;
 
+rs2_intrinsics intriseco;
+
 sensor_msgs::CameraInfo cam_info;
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 
+std::string frame_camera;
+std::string frame_depth;
+std::vector<cv::KeyPoint> keypoints;
+
 cv::Mat depth_map;
+
+std::ofstream MyFile;
