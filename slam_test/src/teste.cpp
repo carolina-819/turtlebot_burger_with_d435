@@ -140,7 +140,7 @@ void get_image_camera_info()
     }
 
 }*/
-void cb_depth(const sensor_msgs::ImageConstPtr& msg)
+void cb_align(const sensor_msgs::ImageConstPtr& msg)
 {
     cv_bridge::CvImagePtr depth_image_ptr;
     
@@ -186,10 +186,24 @@ void cb_depth(const sensor_msgs::ImageConstPtr& msg)
     }
     imshow("image grey", graymat);
     waitKey(1);
+    Mat im_with_kp;
+   // resize(graymat, graymat, cv::Size(graymat.cols/2, graymat.rows/2));
+    // Initiate ORB detector
+    Ptr<FeatureDetector> detector = ORB::create();
+    
+    Mat descriptors;
+// find the keypoints and descriptors with ORB
+    
+std::vector<cv::KeyPoint> keypoints_opt;
+    detector->detect(graymat, keypoints_opt);
+    drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+    
+    drawKeypoints( im_with_kp, keypoints_opt, im_with_kp, Scalar(255,255,0), DrawMatchesFlags::DEFAULT );
+    imshow("image grey", im_with_kp);
+    waitKey(1);
    // ros::Publisher chatter_pub = nh.advertise<std_msgs::Image>("chatter", 1000);
     Mat ex = img.clone();
-    imshow("image grey", graymat);
-    waitKey(1);
+   
     Mat cut(h, w, CV_8UC1);
     std::vector<float> Z_points;
     std::vector<float> X_points;
@@ -379,7 +393,7 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     
     Mat descriptors;
 // find the keypoints and descriptors with ORB
-    std::vector<KeyPoint> keypoints;
+    
     detector->detect(src, keypoints);
 
   //  Ptr<DescriptorExtractor> extractor = ORB::create();
@@ -396,8 +410,8 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     // Show blobs
     resize(im_with_keypoints, im_with_keypoints, cv::Size(im_with_keypoints.cols/2, im_with_keypoints.rows/2));
     resize(src, src, cv::Size(src.cols/2, src.rows/2));
-    imshow("cinzento", greyMat );
-    waitKey(1);
+  //  imshow("cinzento", greyMat );
+  //  waitKey(1);
     
     imshow("keypoints", im_with_keypoints);
     waitKey(1);
@@ -440,7 +454,7 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     waitKey();
 */
 }
-void cb_align( const sensor_msgs::Image &msg){
+void cb_depth( const sensor_msgs::Image &msg){
     std::cout << "CARALHO" << std::endl;
     cv_bridge::CvImagePtr depth_image_ptr = cv_bridge::toCvCopy(msg);
     imshow("alinhado", depth_image_ptr->image);
@@ -455,7 +469,7 @@ int main(int argc, char **argv)
     get_image_camera_info();
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
     
-  //  ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
+    ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
    // ros::Subscriber depth_sub = nh.subscribe("/d435/depth/image_raw", 1, cb_depth);
     ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
     
