@@ -32,7 +32,7 @@ rs2_intrinsics intriseco;
 sensor_msgs::CameraInfo cam_info;
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
-
+ros::Publisher pub_cloud_depth;
 std::string frame_camera;
 std::string frame_depth;
 std::vector<cv::KeyPoint> keypoints;

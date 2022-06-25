@@ -184,25 +184,29 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
         }
         
     }
-    imshow("image grey", graymat);
-    waitKey(1);
+    cv::imshow("image grey", graymat);
+    cv::waitKey(1);
     Mat im_with_kp;
-   // resize(graymat, graymat, cv::Size(graymat.cols/2, graymat.rows/2));
-    // Initiate ORB detector
-    Ptr<FeatureDetector> detector = ORB::create();
-    
-    Mat descriptors;
-// find the keypoints and descriptors with ORB
-    
-std::vector<cv::KeyPoint> keypoints_opt;
-    detector->detect(graymat, keypoints_opt);
-    drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
-    
-    drawKeypoints( im_with_kp, keypoints_opt, im_with_kp, Scalar(255,255,0), DrawMatchesFlags::DEFAULT );
-    imshow("image grey", im_with_kp);
-    waitKey(1);
-   // ros::Publisher chatter_pub = nh.advertise<std_msgs::Image>("chatter", 1000);
-    Mat ex = img.clone();
+    cv::drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+    cv::imshow("image grey", im_with_kp);
+    cv::waitKey(1);
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pointcloud->header.frame_id = "d435_color_optical_frame";
+    pointcloud->width = keypoints.size();
+    pointcloud->height = 1;
+
+    for (int i = 0; i < keypoints.size(); i++){
+        pcl::PointXYZ p;
+        p.z = z_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        p.y = y_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        p.x = x_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        pointcloud->points.push_back(p);
+    }
+    sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(*pointcloud.get(), cloud_msg);
+    pub_cloud_depth.publish(cloud_msg);
+  /*  Mat ex = img.clone();
    
     Mat cut(h, w, CV_8UC1);
     std::vector<float> Z_points;
@@ -236,109 +240,12 @@ std::vector<cv::KeyPoint> keypoints_opt;
       //  std::cout << "z points: " << Z_points[i] << std::endl;
     }
 
-    //project into new frame
-  //  MyFile << std::endl;
-    
-
-    //METER ESTE DIST A FUNCIONAR, FAZER O MAPA DA VISAO DE TOP LEVEL. PASSAR PARA A DETETÇÃO DE OBSTACULOS COM A IMAGEM VISUAL
-  //  imshow("image cut", cut);
-  //  waitKey(1);
-
-    
     matplotlibcpp::plot(X_points, Z_points);
    // matplotlibcpp::ylim(0, 2);
   //  matplotlibcpp::xlim(-1, 1);
     matplotlibcpp::title("Standard usage"); // set a title
   //  matplotlibcpp::show();
-  
-/*
-auto depth = rs2::get_depth_frame();
-auto depth_profile = depth.get_profile().as<rs2::video_stream_profile>();
-auto depth_intrin = depth_profile.get_intrinsics();
-
-auto color = fs.get_color_frame();
-auto color_profile = color.get_profile().as<rs2::video_stream_profile>();
-auto color_intrin = color_profile.get_intrinsics();
-
-auto extrin = depth_profile.get_extrinsics_to(color_profile);
-// Maybe color_profile.get_extrinsics_to(depth_profile); ??
-
-float xyz[3];
-float color_xyz[3];
-float ij[2] = { 100, 100 }; // Pixel indexes
-float color_ij[2]; // Matching color pixel
-
-rs2_deproject_pixel_to_point(xyz, &depth_intrin, ij, depth.get_distance(ij[0], ij[1]));
-rs2_transform_point_to_point(color_xyz, extrin, xyz);
-rs2_project_point_to_pixel(color_ij, color_intrin, color_xyz);
- */ /*  float point[3];
-    float local[2] = [0,0];
-    rs2_deproject_pixel_to_point(point, &intriseco, local, depth_image_ptr->image.at(0,0))*/
-
-    //processamento de imagem com cor!
-/*
-    Mat image = depth_image_ptr->image;
-    Mat image_canny = depth_image_to_canny->image;
-    imshow("depth", image);
-    waitKey(1);*/
-  /*  Mat edges;
-    Canny(image_canny, edges, 0.2, 0.8, 3, false);
-    //image.setTo(Scalar(200, 50, 0, 255), edges);
-
-    // Create the images that will use to extract the horizontal and vertical lines
-    Mat vertical = edges.clone();
-    
-    // Specify size on vertical axis
-    int vertical_size = vertical.rows / 30;
-    // Create structure element for extracting vertical lines through morphology operations
-    Mat verticalStructure = getStructuringElement(MORPH_RECT, Size(1, vertical_size));
-    // Apply morphology operations
-    erode(vertical, vertical, verticalStructure, Point(-1, -1));
-    dilate(vertical, vertical, verticalStructure, Point(-1, -1));
-    
-
-    ROS_WARN_STREAM("vertical rows: " << vertical.rows << "ivertical cols " << vertical.cols);
-    for(int y = 0; y < vertical.rows; y++) {
-        for(int x = 0; x < vertical.cols; x++) {
-            float value = vertical.at<float>(y, x);
-            if(value > 0){
-                float distance = image.at<int>(y, x);
-                check_distance(*zones, Point(y, x), distance);
-            }
-            //ROS_WARN_STREAM("x: " << x << " y: " << y << " e o que ta la: " << value);
-        }
-    }
-   // resize(vertical, vertical, Size(vertical.cols/2, vertical.rows/2));
-  //  imshow("vertical", image);
-   // waitKey(1);
-
-    srand(time(0)); 
-    Mat hora_da_verdade = Mat(image.rows, image.cols, image.type());
-    ROS_WARN_STREAM("image rows: " << image.rows << "image cols " << image.cols);
-    for(int i = 0; i < zones.size(); i++){
-        Vec3b color;
-        color[0] = 1 + (rand()) / ( (RAND_MAX/(254-1)));
-        color[1] = 1 + (rand()) / ( (RAND_MAX/(254-1)));
-        color[2] = 1 + (rand()) / ( (RAND_MAX/(254-1)));
-        for(int j = 0; j < zones.at(i).pontos.size(); j++){
-            hora_da_verdade.at<Vec3b>(zones.at(i).pontos.at(j).y, zones.at(i).pontos.at(j).x) = color;
-        }
-    }
-    //tentar pintar uma nova imagem com cores diferentes para as diferentes zonas OU por o valor do average no primeiro ponto de cada zona na imagem original :D
-    show_wait_destroy("o que e isto", hora_da_verdade);
-    //ROS_WARN_STREAM("tem alguma coisa?: " << zones.size());
-    
-    //passos: -percorrer edges -detetar pontos brancos -ir buscar distancias a depth map original -agrupar por proximidades (fazer funcao) 
-    //funcao de agrupar por proximidades: -ver cada ponto branco -percorrer vetor de zonas, ver a qual é que esta mais perto (distancia menor que 0.3 da media) 
-    //-se nao houver nenhum criar nova zona
-     
-
-    //proximo passo: agrupar as linhas verticais por profundidade para ter noçao dos obstaculos?
-   // imshow("imagem de profundidade", im_with_keypoints);
-   //resize(image, image, Size(image.cols/2, image.rows/2));
-   resize(edges, edges, Size(edges.cols/2, edges.rows/2));
-    imshow("image 8 bit", edges);
-    waitKey(1);*/
+  */
 }
 void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding boxes nos objetos
 //converter para greyscale, ver se já da keypoints
@@ -468,7 +375,7 @@ int main(int argc, char **argv)
     get_depth_camera_info();
     get_image_camera_info();
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
-    
+    pub_cloud_depth = nh.advertise<sensor_msgs::PointCloud2> ("points_depth", 1);
     ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
    // ros::Subscriber depth_sub = nh.subscribe("/d435/depth/image_raw", 1, cb_depth);
     ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
