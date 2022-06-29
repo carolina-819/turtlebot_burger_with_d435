@@ -1,10 +1,12 @@
 ### Steps to make this work ###
 
-> Clone this repository to the src folder in your catkin workspace
+> Clone this repository and the following to the src folder in your catkin workspace
 
 > https://github.com/pal-robotics/realsense_gazebo_plugin clone the realsense_gazebo_plugin into your catkin workspace
 
 > https://github.com/ROBOTIS-GIT/turtlebot3_simulations clone the turtlebot3 simulations into your catkin workspace
+
+> https://github.com/ros-perception/laser_geometry clone the laser_geometry into your catkin workspace
 
 > cd ..
 > 
