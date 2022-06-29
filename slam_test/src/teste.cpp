@@ -4,6 +4,8 @@
 #include "../include/librealsense2/h/rs_frame.h"
 #include <iostream>
 #include <fstream>
+#include <tf/transform_listener.h>
+#include <laser_geometry/laser_geometry.h>
 #include "../include/matplotlibcpp.h"
 #include <opencv2/features2d.hpp>
 using namespace cv;
@@ -66,17 +68,17 @@ void get_depth_camera_info()
         if (sharedCameraInfo != NULL)
         {
             cam_info = *sharedCameraInfo;
-            intriseco.ppx = cam_info.K[2];
-            intriseco.ppy = cam_info.K[5];
-            intriseco.fy = cam_info.K[4];
-            intriseco.fx = cam_info.K[0];
-            intriseco.height = cam_info.height;
-            intriseco.width = cam_info.width;
+            intriseco_depth.ppx = cam_info.K[2];
+            intriseco_depth.ppy = cam_info.K[5];
+            intriseco_depth.fy = cam_info.K[4];
+            intriseco_depth.fx = cam_info.K[0];
+            intriseco_depth.height = cam_info.height;
+            intriseco_depth.width = cam_info.width;
             frame_depth = cam_info.header.frame_id;
             if (cam_info.distortion_model == "plumb_bob") {
-                intriseco.model =  RS2_DISTORTION_BROWN_CONRADY;
+                intriseco_depth.model =  RS2_DISTORTION_BROWN_CONRADY;
             }else if  (cam_info.distortion_model == "equidistant") {
-                intriseco.model = RS2_DISTORTION_KANNALA_BRANDT4;
+                intriseco_depth.model = RS2_DISTORTION_KANNALA_BRANDT4;
             }
             
             ROS_WARN_STREAM("Width = " << cam_info.width << " Height = " << cam_info.height);
@@ -90,7 +92,7 @@ void get_depth_camera_info()
     ROS_WARN_STREAM("done"); // esta preso no do
 }
 
-void get_image_camera_info()
+void get_color_camera_info()
 {
     boost::shared_ptr<sensor_msgs::CameraInfo const> sharedCameraInfo;
     do
@@ -100,8 +102,18 @@ void get_image_camera_info()
         if (sharedCameraInfo != NULL)
         {
             cam_info = *sharedCameraInfo;
-           
-            frame_camera = cam_info.header.frame_id;
+            intriseco_color.ppx = cam_info.K[2];
+            intriseco_color.ppy = cam_info.K[5];
+            intriseco_color.fy = cam_info.K[4];
+            intriseco_color.fx = cam_info.K[0];
+            intriseco_color.height = cam_info.height;
+            intriseco_color.width = cam_info.width;
+            frame_color = cam_info.header.frame_id;
+            if (cam_info.distortion_model == "plumb_bob") {
+                intriseco_color.model =  RS2_DISTORTION_BROWN_CONRADY;
+            }else if  (cam_info.distortion_model == "equidistant") {
+                intriseco_color.model = RS2_DISTORTION_KANNALA_BRANDT4;
+            }
             
         }
         else
@@ -142,6 +154,7 @@ void get_image_camera_info()
 }*/
 void cb_align(const sensor_msgs::ImageConstPtr& msg)
 {
+    rs2_intrinsics intriseco = intriseco_color;
     cv_bridge::CvImagePtr depth_image_ptr;
     
     try
@@ -162,7 +175,7 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
 
     double minVal, maxVal;
     minMaxLoc(img, &minVal, &maxVal);
-    std::cout << "min: " << minVal << " max: " << maxVal << std::endl;
+   // std::cout << "min: " << minVal << " max: " << maxVal << std::endl;
 
     Mat x_coord(intriseco.height, intriseco.width, CV_32F);
     Mat y_coord(intriseco.height, intriseco.width, CV_32F);
@@ -173,21 +186,25 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
             float pixel[2] = {i, j};
             
             float point[3];
-            rs2_deproject_pixel_to_point( point, &intriseco, pixel, img.at<u_int16_t>(i, j));
+        //    rs2_deproject_pixel_to_point( point, &intriseco, pixel, img.at<u_int16_t>(i, j));
             graymat.at<unsigned char>(i, j) = uchar ((img.at<u_int16_t>(i, j) * 255)/maxVal);
          //   std::cout << "checkpoint " << point[0] << " " << point[1] << " " << point[2] << "depth " << img.at<u_int16_t>(i, j) << std::endl;
          //   std::cout << "valor " << img.at<u_int16_t>(i, j) << std::endl;
-            x_coord.at<float>(i, j) =  point[1] * 0.001;
-            y_coord.at<float>(i, j) = point[0] * 0.001;
-            z_coord.at<float>(i, j) = point[2] * 0.001;
-          //  std::cout << "center: " << abs((i-(h/2) * img.at<u_int16_t>(j,i)) / intriseco.fy * 0.01) << "m" << std::endl;
+         /*   x_coord.at<float>(i, j) =  point[1] * 0.001;
+            y_coord.at<float>(i, j) = (point[0])* 0.001;
+            z_coord.at<float>(i, j) = point[2]* 0.001;
+*/
+
+            x_coord.at<float>(i, j) = ((j - intriseco.ppx)/(intriseco.fx)) * img.at<u_int16_t>(i, j) * 0.001;
+            y_coord.at<float>(i, j) = ((i - intriseco.ppy)/(intriseco.fy)) * img.at<u_int16_t>(i, j) * 0.001;
+            z_coord.at<float>(i, j) = img.at<u_int16_t>(i, j) * 0.001;
+            
         }
-        
     }
-    cv::imshow("image grey", graymat);
-    cv::waitKey(1);
+    
     Mat im_with_kp;
     cv::drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+    
     cv::imshow("image grey", im_with_kp);
     cv::waitKey(1);
 
@@ -368,17 +385,41 @@ void cb_depth( const sensor_msgs::Image &msg){
     waitKey(1);
 
 }
+void cb_scan (const sensor_msgs::LaserScanConstPtr& scan_in)
+{
+
+laser_geometry::LaserProjection projector_;
+tf::TransformListener listener_;
+
+  if(!listener_.waitForTransform(
+        scan_in->header.frame_id,
+        "d435_color_optical_frame",
+        scan_in->header.stamp + ros::Duration().fromSec(scan_in->ranges.size()*scan_in->time_increment),
+        ros::Duration(1.0))){
+     return;
+  }
+
+  sensor_msgs::PointCloud2 cloud;
+  projector_.transformLaserScanToPointCloud("d435_color_optical_frame",*scan_in,
+          cloud,listener_);
+
+  pub_cloud_lidar.publish(cloud);        
+
+  // Do something with cloud.
+}
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "test");
     ros::NodeHandle nh;
     get_depth_camera_info();
-    get_image_camera_info();
+    get_color_camera_info();
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
     pub_cloud_depth = nh.advertise<sensor_msgs::PointCloud2> ("points_depth", 1);
+    pub_cloud_lidar = nh.advertise<sensor_msgs::PointCloud2> ("points_lidar", 1);
     ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
    // ros::Subscriber depth_sub = nh.subscribe("/d435/depth/image_raw", 1, cb_depth);
     ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
+    ros::Subscriber scan_sub = nh.subscribe("scan", 1, cb_scan);
     
     while (ros::ok())
     {
@@ -387,10 +428,4 @@ int main(int argc, char **argv)
 
     destroyAllWindows();
     return 0;
-}
-void show_wait_destroy(const char* winname, Mat img) {
-    imshow(winname, img);
-    moveWindow(winname, 500, 0);
-    waitKey(0);
-    destroyWindow(winname);
 }

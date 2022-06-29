@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include "sensor_msgs/PointCloud2.h"
 #include "sensor_msgs/CameraInfo.h"
+#include "sensor_msgs/LaserScan.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/PCLPointCloud2.h>
 #include <cv_bridge/cv_bridge.h>
@@ -27,13 +28,13 @@ typedef struct {
 
 camera_parameters camera_params;
 
-rs2_intrinsics intriseco;
-
+rs2_intrinsics intriseco_depth;
+rs2_intrinsics intriseco_color;
 sensor_msgs::CameraInfo cam_info;
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
-ros::Publisher pub_cloud_depth;
-std::string frame_camera;
+ros::Publisher pub_cloud_depth, pub_cloud_lidar;
+std::string frame_color;
 std::string frame_depth;
 std::vector<cv::KeyPoint> keypoints;
 
