@@ -121,7 +121,7 @@ public:
 
         if_init_ = false;
 
-        slam_landmarks_pub_ = nh.advertise<nuturtle_slam::TurtleMap>("slam_landmarks", 10);
+     //   slam_landmarks_pub_ = nh.advertise<nuturtle_slam::TurtleMap>("slam_landmarks", 10);
         odom_path_pub_ = nh.advertise<nav_msgs::Path>("odom_path", 10);
         slam_path_pub_ = nh.advertise<nav_msgs::Path>("slam_path", 10);
 
@@ -437,7 +437,7 @@ public:
     }
 
     /// \brief save the measurements and trigger the correction
-    void landmarks_callback(const nuturtle_slam::TurtleMap &msg)
+    void landmarks_callback(sensor_msgs::PointCloud2 &msg)
     {
         if (if_measurements_ == false)
         {

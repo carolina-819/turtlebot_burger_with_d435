@@ -55,6 +55,7 @@ void cb_pcl(const sensor_msgs::PointCloud2ConstPtr &msg)
     if(msg){
         pcl_conversions::toPCL(*msg, pcl_toda);
         pcl::fromPCLPointCloud2(pcl_toda, *pc_toda);
+
         std::cout << " tamanho recebido " << pc_toda->points.size() << std::endl;
    
     }
