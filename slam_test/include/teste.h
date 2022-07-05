@@ -31,7 +31,7 @@ camera_parameters camera_params;
 rs2_intrinsics intriseco_depth;
 rs2_intrinsics intriseco_color;
 sensor_msgs::CameraInfo cam_info;
-
+int ts = 2;
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 ros::Publisher pub_cloud_depth, pub_cloud_lidar;
 std::string frame_color;

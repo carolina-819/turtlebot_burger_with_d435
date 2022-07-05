@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch>
 
- <node name="teste" pkg="slam_test" type="teste" output="screen"/>
-
+    <node name="teste" pkg="slam_test" type="teste" output="screen"/>
+    <node name="landmarks" pkg="slam_test" type="landmarks" output="screen"/>
+    <node name="ekf_slam" pgk="slam_test" type="ekf_slam" output="screen"/>
 </launch>
