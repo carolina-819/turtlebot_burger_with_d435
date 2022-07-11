@@ -24,11 +24,14 @@
 
 // tune initialized uncertainty for pose and measurements + R and Q
 
-#include "../include/rigid2d/rigid2d.hpp"
+#include <rigid2d/rigid2d.hpp>
 #include <iostream>
 #include "ros/ros.h"
-#include "../include/rigid2d/diff_drive.hpp"
-#include "../include/rigid2d/waypoints.hpp"
+#include <rigid2d/diff_drive.hpp>
+#include <rigid2d/waypoints.hpp>
+#include <pcl/PCLPointCloud2.h>
+#include "sensor_msgs/PointCloud2.h"
+#include <pcl_conversions/pcl_conversions.h>
 #include <string>
 #include "nav_msgs/Odometry.h"
 #include "sensor_msgs/JointState.h"
@@ -46,10 +49,11 @@
 struct Measurement
 {
     int id_ = -1;
-    double range_ = 0;
-    double bearing_ = 0;
+    double x_ = 0;
+    double y_ = 0;
+    double z_ = 0;
 
-    Measurement(int id, double range, double bearing) : id_(id), range_(range), bearing_(bearing) {}
+    Measurement(int id, double x, double y, double z) : id_(id), x_(x), y_(y), z_(z) {}
 };
 
 class SLAMinControl
@@ -81,14 +85,14 @@ private:
     Eigen::VectorXd mu_ = Eigen::VectorXd::Zero(3);
     Eigen::MatrixXd sigma_ = Eigen::MatrixXd::Zero(3, 3);
 
-    const Eigen::Matrix<double, 3, 3> Rx_ = (Eigen::Matrix<double, 3, 3>() << 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001).finished();
+    const Eigen::Matrix<double, 3, 3> Rx_ = (Eigen::Matrix<double, 3, 3>() << 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001).finished(); 
     const Eigen::Matrix<double, 2, 2> Qx_ = (Eigen::Matrix<double, 2, 2>() << 0.01, 0, 0, 0.01).finished();
 
     std::vector<Measurement> measurements_;
     bool if_measurements_ = false;
 
     // store mapping between landmarkid and index in the state vector/matrix
-    std::unordered_map<int, int> landmark_id_to_index_;
+    std::unordered_map<int, int> landmark_id_to_index_; // TODO que merda é esta: mapeia o id da landmark para o index, mas o que e o index
 
     ros::Publisher slam_landmarks_pub_;
     ros::Publisher odom_path_pub_;
@@ -121,7 +125,7 @@ public:
 
         if_init_ = false;
 
-     //   slam_landmarks_pub_ = nh.advertise<nuturtle_slam::TurtleMap>("slam_landmarks", 10);
+        slam_landmarks_pub_ = nh.advertise<sensor_msgs::PointCloud2>("slam_landmarks", 10);
         odom_path_pub_ = nh.advertise<nav_msgs::Path>("odom_path", 10);
         slam_path_pub_ = nh.advertise<nav_msgs::Path>("slam_path", 10);
 
@@ -178,16 +182,16 @@ public:
 
         // do correction steps if new measurement comes
         if (if_measurements_)
-        {
+        {   
             for (const Measurement &mea : measurements_)
-            {
-                initialize_lanmark(mea);
-                Measurement expected = expected_measurement(mea);
-                Eigen::MatrixXd H = observation_jacobian(mea);
+            {   
+                initialize_lanmark(mea); // mete landmarks recebidas no vetor das landmarks
+                Measurement expected = expected_measurement(mea); // CALCULAR
+                Eigen::MatrixXd H = observation_jacobian(mea); // CALCULAR
 
-                Eigen::Vector2d measurement_diff;
-                double bearing_diff = rigid2d::normalize_angle(mea.bearing_ - expected.bearing_);
-                measurement_diff << mea.range_ - expected.range_, bearing_diff;
+                Eigen::Vector3d measurement_diff;
+                //double bearing_diff = rigid2d::normalize_angle(mea.bearing_ - expected.bearing_);
+                measurement_diff << mea.x_ - expected.x_ , mea.y_ - expected.y_, mea.z_ - expected.z_;
 
                 Eigen::MatrixXd K = sigma_ * H.transpose() * (H * sigma_ * H.transpose() + Qx_).inverse();
                 mu_ = mu_ + K * measurement_diff;
@@ -226,7 +230,7 @@ public:
         publish_nav_odo(mu_(0), mu_(1), mu_(2));
 
         // publish slam landmarks in map frame
-        nuturtle_slam::TurtleMap slam_map;
+      /*  nuturtle_slam::TurtleMap slam_map;
         int landmark_numbers = (mu_.size() - 3) / 2;
 
         for (int i = 0; i < landmark_numbers; i++)
@@ -240,7 +244,7 @@ public:
         }
 
         slam_landmarks_pub_.publish(slam_map);
-
+*/
         last_l_ = current_l_;
         last_r_ = current_r_;
 
@@ -256,7 +260,8 @@ public:
         int index = landmark_id_to_index_.at(mea.id_);
         double delta_x = mu_(index) - mu_(0);
         double delta_y = mu_(index + 1) - mu_(1);
-        double q = std::pow(mu_(index) - mu_(0), 2) + std::pow(mu_(index + 1) - mu_(1), 2);
+        double delta_z = mu_(index + 2) - mu_(2);
+        
 
         Eigen::Matrix<double, 2, 5> low_H;
         low_H << -std::sqrt(q) * delta_x, -std::sqrt(q) * delta_y, 0, std::sqrt(q) * delta_x, std::sqrt(q),
@@ -278,19 +283,21 @@ public:
     }
 
     /// \brief calculate the expected measurement
-    Measurement expected_measurement(const Measurement &mea)
+    Measurement expected_measurement(const Measurement &mea) //TODO adequar isto aos valores
     {
         int index = landmark_id_to_index_.at(mea.id_);
-        double range = std::sqrt(std::pow(mu_(index) - mu_(0), 2) + std::pow(mu_(index + 1) - mu_(1), 2));
-        double bearing = rigid2d::normalize_angle(std::atan2(mu_(index + 1) - mu_(1), mu_(index) - mu_(0)) - mu_(2));
-        Measurement expected_mea(mea.id_, range, bearing);
+        double x =(mu_(index) - mu_(0));
+        double y =(mu_(index + 1) - mu_(1));
+        double z =(mu_(index + 2) - mu_(2));
+        
+        Measurement expected_mea(mea.id_, x, y, z);
         // std::cout << "Expected Range at " << mea.id_ << " is " << range << std::endl;
         // std::cout << "Expected Bearing at " << mea.id_ << " is " << bearing << std::endl;
         return expected_mea;
     }
 
     /// \brief initialize the landmark it does not exist in the matrix
-    void initialize_lanmark(const Measurement &mea)
+    void initialize_lanmark(const Measurement &mea) //TODO adequar isto aos valores recebidos da pointcloud
     {
         if (landmark_id_to_index_.find(mea.id_) == landmark_id_to_index_.end())
         {
@@ -298,20 +305,22 @@ public:
 
             // add to the state vector
             int index = mu_.size(); // added index would be index, index + 1
-            mu_.conservativeResize(index + 2);
-            mu_(index) = mu_(0) + mea.range_ * std::cos(mea.bearing_ + mu_(2));
-            mu_(index + 1) = mu_(1) + mea.range_ * std::sin(mea.bearing_ + mu_(2));
+            mu_.conservativeResize(index + 3);
+            mu_(index) = mu_(0) + mea.x_;
+            mu_(index + 1) = mu_(1) + mea.y_;
+            mu_(index + 2) = mu_(2); 
 
             // add to the mapping
             landmark_id_to_index_[mea.id_] = index;
 
             // also initialize sigma matrix
-            sigma_.conservativeResize(Eigen::NoChange, index + 2);
-            sigma_.block(0, index, index, 2) = Eigen::MatrixXd::Zero(index, 2);
-            sigma_.conservativeResize(index + 2, Eigen::NoChange);
-            sigma_.block(index, 0, 2, index + 2) = Eigen::MatrixXd::Zero(2, index + 2);
+            sigma_.conservativeResize(Eigen::NoChange, index + 3);
+            sigma_.block(0, index, index, 3) = Eigen::MatrixXd::Zero(index, 3);
+            sigma_.conservativeResize(index + 3, Eigen::NoChange);
+            sigma_.block(index, 0, 3, index + 3) = Eigen::MatrixXd::Zero(3, index + 3);
             sigma_(index, index) = 0.001;
             sigma_(index + 1, index + 1) = 0.001;
+            sigma_(index + 2, index + 2) = 0.001; //covariancia sigma, valor fixo
         }
     }
 
@@ -321,6 +330,7 @@ public:
         // calculate G
         Eigen::MatrixXd Gt = Eigen::MatrixXd::Identity(sigma_.rows(), sigma_.cols());
 
+        //equaçoes que relacionam a posiçao antigas com a atual tendo em contamas medidas novas
         if (rigid2d::almost_equal(twist.omega, 0.0))
         {
             Gt(0, 2) = -twist.v_x * std::sin(mu_(2));
@@ -328,13 +338,13 @@ public:
         }
         else
         {
-            Gt(0, 2) = -(twist.v_x / twist.omega) * std::cos(mu_(2)) +
+            Gt(0, 2) = -(twist.v_x / twist.omega) * std::cos(mu_(2)) + 
                        (twist.v_x / twist.omega) * std::cos(mu_(2) + twist.omega);
             Gt(1, 2) = -(twist.v_x / twist.omega) * std::sin(mu_(2)) +
                        (twist.v_x / twist.omega) * std::sin(mu_(2) + twist.omega);
         }
         Eigen::MatrixXd Rt = Eigen::MatrixXd::Zero(sigma_.rows(), sigma_.cols());
-        Rt.block(0, 0, 3, 3) = Rx_;
+        Rt.block(0, 0, 3, 3) = Rx_; //covariancia do processo, valor fixo
         sigma_ = Gt * sigma_ * Gt.transpose() + Rt;
     }
 
@@ -437,16 +447,22 @@ public:
     }
 
     /// \brief save the measurements and trigger the correction
-    void landmarks_callback(sensor_msgs::PointCloud2 &msg)
+    void landmarks_callback(const sensor_msgs::PointCloud2ConstPtr &msg)
     {
+        pcl::PCLPointCloud2 pcl_toda;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr pc_toda(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl_conversions::toPCL(*msg, pcl_toda);
+        pcl::fromPCLPointCloud2(pcl_toda, *pc_toda);
         if (if_measurements_ == false)
         {
             measurements_.clear();
-            for (int i = 0; i < msg.id.size(); i++)
+            for (int i = 0; i < pc_toda->points.size(); i++)
             {
-                double range = std::sqrt(std::pow(msg.x.at(i), 2) + std::pow(msg.y.at(i), 2));
-                double bearing = std::atan2(msg.y.at(i), msg.x.at(i));
-                measurements_.emplace_back(msg.id.at(i), range, bearing);
+                //calcular isto tendo em conta o x y z
+                double x = pc_toda->at(i).x;
+                double y = pc_toda->at(i).y;
+                double z = pc_toda->at(i).z;
+                measurements_.emplace_back(i, x, y, z);
                 // std::cout << "Measured Range at " << msg.id.at(i) << " is " << range << std::endl;
                 // std::cout << "Measured Bearing at " << msg.id.at(i) << " is " << bearing << std::endl;
             }

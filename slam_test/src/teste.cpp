@@ -6,10 +6,8 @@
 #include <fstream>
 #include <tf/transform_listener.h>
 #include <laser_geometry/laser_geometry.h>
-#include "../include/matplotlibcpp.h"
 #include <opencv2/features2d.hpp>
 using namespace cv;
-using namespace matplotlibcpp;
 
 void show_wait_destroy(const char* winname, Mat img);
 void check_distance(std::vector<zone> &zonas, Point ponto, float distancia);

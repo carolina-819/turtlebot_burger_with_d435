@@ -11,7 +11,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr pc_lidar(new pcl::PointCloud<pcl::PointXYZ>)
 pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud(new pcl::PointCloud<pcl::PointXYZ>);
 
 void merge_callback(const sensor_msgs::PointCloud2ConstPtr &depth_msg, const sensor_msgs::PointCloud2ConstPtr &lidar_msg){
-
+    pointcloud->clear();
     sensor_msgs::PointCloud2 cloud_msg;
     pcl::PCLPointCloud2 pcl_depth, pcl_lidar;
 
@@ -22,7 +22,9 @@ void merge_callback(const sensor_msgs::PointCloud2ConstPtr &depth_msg, const sen
     pcl::fromPCLPointCloud2(pcl_lidar, *pc_lidar);
     int size_ = 0;
     for(int i = 0; i < pc_depth->points.size(); i++){
-        pointcloud->points.push_back(pc_depth->at(i));
+        pcl::PointXYZ p = pc_depth->at(i);
+        p.y = 0;
+        pointcloud->points.push_back(p);
         size_++;
     }
     
