@@ -2,7 +2,7 @@
 <launch>
 
     <node name="teste" pkg="slam_test" type="teste" output="screen"/>
-    <node name="landmarks" pkg="slam_test" type="landmarks" output="screen"/>
+    <!--node name="landmarks" pkg="slam_test" type="landmarks" output="screen"/-->
     <!--node name="ekf_slam" pkg="slam_test" type="ekf_slam" output="screen">
         <param name="~body_frame_id_" type="str" value="base_link" />
         <param name="~odom_frame_id_" type="str" value="odom" />

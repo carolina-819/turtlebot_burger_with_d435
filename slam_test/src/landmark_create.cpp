@@ -51,20 +51,23 @@ void merge_callback(const sensor_msgs::PointCloud2ConstPtr &depth_msg, const sen
             distance = lidar_msg->ranges[pos - 1];
         }
 
-        if(distance > 0){
-            std::cout << "encontrou correspondencia" << i << std::endl;
+        if(distance > 0 || (lidar_msg->ranges[pos] != lidar_msg->ranges[pos])){
+           // std::cout << "encontrou correspondencia" << i << std::endl;
             pcl::PointXYZ p;
-            
-            // passa de volta para as coordenadas da frame de visao, desta vez com a informaçao do lidar, que a partida é mais reliable??
-            p.y = ponto.y;
-            p.z = (distance * std::cos(bearing_lidar)) + dx; 
-            p.x = dy - (distance * std::sin(bearing_lidar));
-            pointcloud->points.push_back(p);
-            size_++;
+            if(!lidar_msg->ranges[pos]){
+                std::cout << "e um menino (a distancia e infinita)" << lidar_msg->ranges[pos] << std::endl;
+                pointcloud->points.push_back(ponto);
+                size_++;
+            }else{
+                 // passa de volta para as coordenadas da frame de visao, desta vez com a informaçao do lidar, que a partida é mais reliable??
+                p.y = ponto.y;
+                p.z = (distance * std::cos(bearing_lidar)) + dx; 
+                p.x = dy - (distance * std::sin(bearing_lidar));
+                pointcloud->points.push_back(p);
+                size_++;
+            }
         }
             
-        
-
             
     }
     

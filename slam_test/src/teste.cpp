@@ -126,7 +126,7 @@ void get_color_camera_info()
     ROS_WARN_STREAM("done"); 
 }
 
-void cb_align(const sensor_msgs::ImageConstPtr& msg)
+void cb_align(const sensor_msgs::ImageConstPtr& msg, const sensor_msgs::LaserScanConstPtr& lidar_msg) 
 {
     rs2_intrinsics intriseco = intriseco_color;
     cv_bridge::CvImagePtr depth_image_ptr;
@@ -160,14 +160,7 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
             float pixel[2] = {i, j};
             
             float point[3];
-        //    rs2_deproject_pixel_to_point( point, &intriseco, pixel, img.at<u_int16_t>(i, j));
             graymat.at<unsigned char>(i, j) = uchar ((img.at<u_int16_t>(i, j) * 255)/maxVal);
-         //   std::cout << "checkpoint " << point[0] << " " << point[1] << " " << point[2] << "depth " << img.at<u_int16_t>(i, j) << std::endl;
-         //   std::cout << "valor " << img.at<u_int16_t>(i, j) << std::endl;
-         /*   x_coord.at<float>(i, j) =  point[1] * 0.001;
-            y_coord.at<float>(i, j) = (point[0])* 0.001;
-            z_coord.at<float>(i, j) = point[2]* 0.001;
-*/
 
             x_coord.at<float>(i, j) = ((j - intriseco.ppx)/(intriseco.fx)) * img.at<u_int16_t>(i, j) * 0.001;
             y_coord.at<float>(i, j) = ((i - intriseco.ppy)/(intriseco.fy)) * img.at<u_int16_t>(i, j) * 0.001;
@@ -182,42 +175,52 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
  //   cv::imshow("image grey", im_with_kp);
  //   cv::waitKey(1);
 
-    //check for coplanarity and filter keypoints
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud(new pcl::PointCloud<pcl::PointXYZ>);
     pointcloud->header.frame_id = "d435_color_optical_frame";
     
     int size_pcl = 0;
     for (int i = 0; i < keypoints.size(); i++){
-        pcl::PointXYZ p;
-        p.z = z_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
-        p.y = y_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
-        p.x = x_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
-      /*  
-        pcl::PointXYZ p1, p2, p3;
-        p1.z = z_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x + ts);
-        p1.y = y_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x + ts);
-        p1.x = x_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x + ts);
+        // TODO FILTRAR KEYPOINTS AQUI COM A CENA DO LIDAR
+        pcl::PointXYZ ponto;
+        ponto.z = z_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        ponto.y = y_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        ponto.x = x_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+    
 
-        p2.z = z_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x - ts);
-        p2.y = y_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x - ts);
-        p2.x = x_coord.at<float>(keypoints[i].pt.y - ts, keypoints[i].pt.x - ts);
-
-        p3.z = z_coord.at<float>(keypoints[i].pt.y + ts, keypoints[i].pt.x);
-        p3.y = y_coord.at<float>(keypoints[i].pt.y + ts, keypoints[i].pt.x);
-        p3.x = x_coord.at<float>(keypoints[i].pt.y + ts, keypoints[i].pt.x);
-
-        float result = check_coplanar(p, p1, p2, p3);*/
-     //   if(abs(result) > 1e-07){ //aumentar este valor
-          //  std::cout << "resultado coplanar " << result << std::endl;
-            pointcloud->points.push_back(p);
-            size_pcl++;
-      //  }
+        //filtra pontos
+         // passa para a frame da camara
+         double x_lidar = ponto.z - dx;
+         double y_lidar = dy - ponto.x;
+         double bearing_lidar = std::atan2(y_lidar, x_lidar); // bearing aproximado
         
+        int pos = bearing_lidar/(lidar_msg->angle_increment);
+        double distance = -1;
+        if((abs(lidar_msg->ranges[pos] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos] > 0)) ) {
+            distance = lidar_msg->ranges[pos];
+        }
+        else if((abs(lidar_msg->ranges[pos + 1] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos + 1] > 0)) ) {
+            distance = lidar_msg->ranges[pos + 1];
+        }else if((abs(lidar_msg->ranges[pos -1] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos - 1] > 0)) ) {
+            distance = lidar_msg->ranges[pos - 1];
+        }
 
-      // pointcloud->points.push_back(p1);
-      // pointcloud->points.push_back(p2);
-      // pointcloud->points.push_back(p3);
+        if(distance > 0 || (lidar_msg->ranges[pos] != lidar_msg->ranges[pos])){
+           // std::cout << "encontrou correspondencia" << i << std::endl;
+            pcl::PointXYZ p;
+            if(!lidar_msg->ranges[pos]){
+                std::cout << "e um menino (a distancia e infinita)" << lidar_msg->ranges[pos] << std::endl;
+                pointcloud->points.push_back(ponto);
+                size_++;
+            }else{
+                 // passa de volta para as coordenadas da frame de visao, desta vez com a informaçao do lidar, que a partida é mais reliable??
+                p.y = ponto.y;
+                p.z = (distance * std::cos(bearing_lidar)) + dx; 
+                p.x = dy - (distance * std::sin(bearing_lidar));
+                pointcloud->points.push_back(p);
+                size_++;
+            }
+        }
     }
     pointcloud->width = size_pcl;
     pointcloud->height = 1;
@@ -293,12 +296,21 @@ int main(int argc, char **argv)
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
     pub_cloud_depth = nh.advertise<sensor_msgs::PointCloud2> ("points_depth", 1);
     pub_cloud_lidar = nh.advertise<sensor_msgs::PointCloud2> ("points_lidar", 1);
+
     ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
-   // ros::Subscriber depth_sub = nh.subscribe("/d435/depth/image_raw", 1, cb_depth);
-    ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
-    ros::Subscriber scan_sub = nh.subscribe("scan", 1, cb_scan);
+
+    message_filters::Subscriber<sensor_msgs::ImageConstPtr> cloud_depth_sub(nh, "/d435/aligned_depth_to_color/image_raw", 1);
+    message_filters::Subscriber<sensor_msgs::LaserScan> lidar_sub(nh, "scan", 1);
+
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::LaserScan> MySyncPolicy;
+    
+    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), cloud_depth_sub, lidar_sub);
+
+    sync.registerCallback(boost::bind(&cb_align, _1, _2));
+    
+  //  ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
+  //  ros::Subscriber scan_sub = nh.subscribe("scan", 1, cb_scan);
     std::cout << "o que e que se passa" << std::endl;
-    ros::Subscriber pcl_sub = nh.subscribe("landmarks", 1, cb_pcl);
     while (ros::ok())
     {
         ros::spinOnce();
