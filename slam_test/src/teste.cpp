@@ -54,7 +54,7 @@ void cb_pcl(const sensor_msgs::PointCloud2ConstPtr &msg)
         pcl_conversions::toPCL(*msg, pcl_toda);
         pcl::fromPCLPointCloud2(pcl_toda, *pc_toda);
 
-        std::cout << " tamanho recebido " << pc_toda->points.size() << std::endl;
+       // std::cout << " tamanho recebido " << pc_toda->points.size() << std::endl;
    
     }
    
@@ -179,8 +179,8 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
     Mat im_with_kp;
     cv::drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
     
-    cv::imshow("image grey", im_with_kp);
-    cv::waitKey(1);
+ //   cv::imshow("image grey", im_with_kp);
+ //   cv::waitKey(1);
 
     //check for coplanarity and filter keypoints
     
@@ -207,17 +207,17 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg)
         p3.y = y_coord.at<float>(keypoints[i].pt.y + ts, keypoints[i].pt.x);
         p3.x = x_coord.at<float>(keypoints[i].pt.y + ts, keypoints[i].pt.x);
 
-        float result = check_coplanar(p, p1, p2, p3);
-        if(abs(result) > 1e-09){ //aumentar este valor
-            std::cout << "resultado coplanar " << result << std::endl;*/
+        float result = check_coplanar(p, p1, p2, p3);*/
+     //   if(abs(result) > 1e-07){ //aumentar este valor
+          //  std::cout << "resultado coplanar " << result << std::endl;
             pointcloud->points.push_back(p);
             size_pcl++;
-        //}
+      //  }
         
 
-      //  pointcloud->points.push_back(p1);
-      //  pointcloud->points.push_back(p2);
-      //  pointcloud->points.push_back(p3);
+      // pointcloud->points.push_back(p1);
+      // pointcloud->points.push_back(p2);
+      // pointcloud->points.push_back(p3);
     }
     pointcloud->width = size_pcl;
     pointcloud->height = 1;
@@ -246,19 +246,19 @@ void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding b
     Mat im_with_keypoints;
     drawKeypoints( src, keypoints, im_with_keypoints, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
     
-    // Show blobs
+
     resize(im_with_keypoints, im_with_keypoints, cv::Size(im_with_keypoints.cols/2, im_with_keypoints.rows/2));
     resize(src, src, cv::Size(src.cols/2, src.rows/2));
      
-    imshow("keypoints", im_with_keypoints);
-    waitKey(1);
+  //  imshow("keypoints", im_with_keypoints);
+  //  waitKey(1);
 
  
 }
 void cb_depth( const sensor_msgs::Image &msg){
     cv_bridge::CvImagePtr depth_image_ptr = cv_bridge::toCvCopy(msg);
-    imshow("alinhado", depth_image_ptr->image);
-    waitKey(1);
+ //   imshow("alinhado", depth_image_ptr->image);
+ //   waitKey(1);
 
 }
 void cb_scan (const sensor_msgs::LaserScanConstPtr& scan_in)
