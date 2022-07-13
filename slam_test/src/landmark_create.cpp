@@ -25,43 +25,10 @@ void merge_callback(const sensor_msgs::PointCloud2ConstPtr &depth_msg, const sen
     int size_ = 0;
     
     for(int i = 0; i < pc_depth->points.size(); i++){
-     /*   geometry_msgs::PointStamped stamped_in1;
-        stamped_in1.point.x = pc_depth->at(i).x;
-        stamped_in1.point.y = pc_depth->at(i).y;
-        stamped_in1.point.z = pc_depth->at(i).z;
-        geometry_msgs::PointStamped stamped_out1;
         // altera pontos da frame da pc para a frame do lidar
      //    listener->transformPoint("base_scan", stamped_in1, stamped_out1);
         // calcula bearing na frame do lidar
-        double bearing = std::atan2(stamped_out1.point.y, stamped_out1.point.x); //este bearing ja esta na frame do lidar
-       
-        double bearing_lidar = bearing - M_PI;
-        //descobre posição aproximada 
-        int pos = bearing/(lidar_msg->angle_increment);
-        double distance = lidar_msg->ranges[pos];
-        // se o ponto naquele raio, ou um dos pontos ao lado, tem uma distancia parecida
-        if((abs(distance - ( std::sqrt(std::pow(stamped_out1.point.x, 2) + std::pow(stamped_out1.point.y, 2)) )) < tole ) ||
-            (abs(lidar_msg->ranges[pos + 1] - ( std::sqrt(std::pow(stamped_out1.point.x, 2) + std::pow(stamped_out1.point.y, 2)) )) < tole) ||
-            (abs(lidar_msg->ranges[pos - 1] - ( std::sqrt(std::pow(stamped_out1.point.x, 2) + std::pow(stamped_out1.point.y, 2)) )) < tole) ) {
-            
-            std::cout << "encontrou correspondencia" << std::endl;
-            geometry_msgs::PointStamped stamped_in2;
-            geometry_msgs::PointStamped stamped_out2;
-
-            pcl::PointXYZ p;
-            // cria ponto na frame do lidar com as respetivas distancias tendo em conta os valores do lidar
-            stamped_in2.point.x = distance * std::cos(bearing);
-            stamped_in2.point.y = distance * std::sin(bearing);
-            stamped_in2.point.z = 0;
-            // transforma ponto nas coordenadas da camera
-            listener->transformPoint("d435_color_optical_frame", stamped_in2, stamped_out2);
-            p.x = stamped_out2.point.x;
-            p.y = stamped_out2.point.y;
-            p.z = stamped_out2.point.z;
-            // publica esse ponto
-            pointcloud->points.push_back(p);
-            size_++;
-        }*/
+        
         //se no lidar nao houver nada com um z parecido, descarta ponto
         //se houver, poe esse z na pointcloud, LANDMARK
         
