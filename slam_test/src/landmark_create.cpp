@@ -11,9 +11,7 @@ ros::Publisher landmarks_pub;
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc_depth(new pcl::PointCloud<pcl::PointXYZ>);
 pcl::PointCloud<pcl::PointXYZ>::Ptr pc_lidar(new pcl::PointCloud<pcl::PointXYZ>);
 pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud(new pcl::PointCloud<pcl::PointXYZ>);
-double dx = 0.018;
-double dy = 0.0175;
-float tole = 0.5;
+
 void merge_callback(const sensor_msgs::PointCloud2ConstPtr &depth_msg, const sensor_msgs::LaserScanConstPtr& lidar_msg){
     pointcloud->clear();
     sensor_msgs::PointCloud2 cloud_msg;

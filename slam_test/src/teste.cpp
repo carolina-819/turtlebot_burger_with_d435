@@ -45,6 +45,30 @@ float check_coplanar(pcl::PointXYZ p1, pcl::PointXYZ p2, pcl::PointXYZ p3, pcl::
 
 }
 
+std::vector<double> sensor_fusion(double x_old, double y_old, double x_meas, double y_meas, double relation, double range, double teta){
+    // range e teta são os valores que vem do lidar
+    // old sao os valores da camara, meas sao os valores do lidar que corrigem
+    float old_x_variance, old_y_variance, meas_x_variance, meas_y_variance;
+    // camara, o x é a distancia, que vai ser o z, que tem de incerteza os 2% certos
+    old_x_variance = std::pow(sigma_vision, 2);
+    old_y_variance = std::pow(sigma_vision*(relation), 2);
+
+    // lidar, a variancia está associada ao range
+    // TODO receber o range e o teta. o range serve p saber qual sigma usar
+    if (range * 1000  <= 499){
+        meas_x_variance = std::pow(sigma_lidar1 * std::cos(teta) * range * 1000, 2);
+        meas_y_variance = std::pow(sigma_lidar1 * std::sin(teta) * range * 1000, 2);
+    }else{
+        meas_x_variance = std::pow(sigma_lidar2 * std::cos(teta) * range * 1000, 2);
+        meas_y_variance = std::pow(sigma_lidar2 * std::sin(teta) * range * 1000, 2);
+    }
+    
+    // CALCULATE X and y
+    
+    double x = (old_x_variance*x_old + x_meas*meas_x_variance)/(old_x_variance+meas_x_variance);
+    double y = (old_y_variance*y_old + y_meas*meas_y_variance)/(old_y_variance+meas_y_variance);
+    return std::vector<double> {x, y};
+}
 
 void cb_pcl(const sensor_msgs::PointCloud2ConstPtr &msg)
 {
@@ -169,8 +193,8 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg, const sensor_msgs::LaserSca
         }
     }
     
-    Mat im_with_kp;
-    cv::drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+  //  Mat im_with_kp;
+   // cv::drawKeypoints( graymat, keypoints, im_with_kp, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
     
  //   cv::imshow("image grey", im_with_kp);
  //   cv::waitKey(1);
@@ -180,46 +204,60 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg, const sensor_msgs::LaserSca
     pointcloud->header.frame_id = "d435_color_optical_frame";
     
     int size_pcl = 0;
-    for (int i = 0; i < keypoints.size(); i++){
+    for (int i = 0; i < keypoints_new.size(); i++){
         // TODO FILTRAR KEYPOINTS AQUI COM A CENA DO LIDAR
         pcl::PointXYZ ponto;
-        ponto.z = z_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
-        ponto.y = y_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
-        ponto.x = x_coord.at<float>(keypoints[i].pt.y, keypoints[i].pt.x);
+        ponto.z = z_coord.at<float>(keypoints_new[i].pt.y, keypoints_new[i].pt.x);
+        ponto.y = y_coord.at<float>(keypoints_new[i].pt.y, keypoints_new[i].pt.x);
+        ponto.x = x_coord.at<float>(keypoints_new[i].pt.y, keypoints_new[i].pt.x);
     
 
         //filtra pontos
-         // passa para a frame da camara
-         double x_lidar = ponto.z - dx;
-         double y_lidar = dy - ponto.x;
-         double bearing_lidar = std::atan2(y_lidar, x_lidar); // bearing aproximado
-        
-        int pos = bearing_lidar/(lidar_msg->angle_increment);
+         // passa para a frame do lidar, valores da camara
+         double x_cam = ponto.z - dx;
+         double y_cam = dy - ponto.x;
+         double bearing_cam = std::atan2(y_cam, x_cam); // bearing aproximado
+        double bearing_lidar = 0;
+        int pos = bearing_cam/(lidar_msg->angle_increment);
         double distance = -1;
-        if((abs(lidar_msg->ranges[pos] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos] > 0)) ) {
-            distance = lidar_msg->ranges[pos];
+        int aux = -1;
+        // otimizar para ter o range cuja diferença é menor
+        if((abs(lidar_msg->ranges[pos] - ( std::sqrt(std::pow(x_cam, 2) + std::pow(y_cam, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos] > 0)) ) {
+            aux = pos;
         }
-        else if((abs(lidar_msg->ranges[pos + 1] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos + 1] > 0)) ) {
-            distance = lidar_msg->ranges[pos + 1];
-        }else if((abs(lidar_msg->ranges[pos -1] - ( std::sqrt(std::pow(x_lidar, 2) + std::pow(y_lidar, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos - 1] > 0)) ) {
-            distance = lidar_msg->ranges[pos - 1];
+        else if((abs(lidar_msg->ranges[pos + 1] - ( std::sqrt(std::pow(x_cam, 2) + std::pow(y_cam, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos + 1] > 0)) ) {
+           aux = pos + 1;
+        }else if((abs(lidar_msg->ranges[pos -1] - ( std::sqrt(std::pow(x_cam, 2) + std::pow(y_cam, 2)) )) < tole ) && (abs(lidar_msg->ranges[pos - 1] > 0)) ) {
+            aux = pos - 1;
         }
-
-        if(distance > 0 || (lidar_msg->ranges[pos] != lidar_msg->ranges[pos])){
+        if(aux > -1) {
+            distance = lidar_msg->ranges[aux];
+            bearing_lidar = aux * lidar_msg->angle_increment;
+        }
+        
+        if(distance > 0 || (lidar_msg->ranges[aux] != lidar_msg->ranges[aux])){
            // std::cout << "encontrou correspondencia" << i << std::endl;
             pcl::PointXYZ p;
-            if(!lidar_msg->ranges[pos]){
-                std::cout << "e um menino (a distancia e infinita)" << lidar_msg->ranges[pos] << std::endl;
-                pointcloud->points.push_back(ponto);
-                size_++;
+            if(!lidar_msg->ranges[aux]){
+                std::cout << "e um menino (a distancia e infinita)" << lidar_msg->ranges[aux] << std::endl;
+                pointcloud->points.push_back(ponto); //nao da para fazer fusao
+                
             }else{
                  // passa de volta para as coordenadas da frame de visao, desta vez com a informaçao do lidar, que a partida é mais reliable??
+                // fusao de sensores
+                // x_cam e y_cam: coordenadas calculadas com os valores que vem da camara, na frame do lidar
+                // x_lidar e y_lidar: coordenadas com os valores que vem do lidar, na frame do lidar
+                double x_lidar = (distance * std::cos(bearing_lidar));
+                double y_lidar = (distance * std::sin(bearing_lidar));
+                std::vector<double> new_val;
+                new_val = sensor_fusion(x_cam, y_cam, x_lidar, y_lidar, (ponto.x/ponto.z), distance, bearing_lidar);
                 p.y = ponto.y;
-                p.z = (distance * std::cos(bearing_lidar)) + dx; 
-                p.x = dy - (distance * std::sin(bearing_lidar));
+                p.z = new_val[0] + dx; 
+                p.x = dy - new_val[1];
                 pointcloud->points.push_back(p);
-                size_++;
+                std::cout << "x novo " << new_val[0] << " y novo " << new_val[1] << " x_cam " << x_cam << " y_cam " << y_cam << " x_lidar " << x_lidar << " y_lidar " << y_lidar << std::endl;
             }
+            size_pcl++;
         }
     }
     pointcloud->width = size_pcl;
@@ -230,28 +268,62 @@ void cb_align(const sensor_msgs::ImageConstPtr& msg, const sensor_msgs::LaserSca
     pcl::toROSMsg(*pointcloud.get(), cloud_msg);
     pub_cloud_depth.publish(cloud_msg);
     
+
 }
+
+
+
 void cb_rgb(const sensor_msgs::Image &msg){ //detectar objetos, meter bounding boxes nos objetos
 
+    
     cv_bridge::CvImagePtr depth_image_ptr = cv_bridge::toCvCopy(msg);
    
-    Mat src = depth_image_ptr->image.clone();
+    img_new = depth_image_ptr->image.clone();
     Mat greyMat;
-    cv::cvtColor(src, greyMat, COLOR_BGR2GRAY);
+    cv::cvtColor(img_new, greyMat, COLOR_BGR2GRAY);
   
     // Initiate ORB detector
     Ptr<FeatureDetector> detector = ORB::create();
-    
-    Mat descriptors;
-// find the keypoints and descriptors with ORB
-    
-    detector->detect(src, keypoints);
-    Mat im_with_keypoints;
-    drawKeypoints( src, keypoints, im_with_keypoints, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
-    
+    Ptr<DescriptorExtractor> descriptor = ORB::create();
 
-    resize(im_with_keypoints, im_with_keypoints, cv::Size(im_with_keypoints.cols/2, im_with_keypoints.rows/2));
-    resize(src, src, cv::Size(src.cols/2, src.rows/2));
+    Ptr<DescriptorMatcher> matcher  = DescriptorMatcher::create ( "BruteForce-Hamming" );
+
+
+    detector->detect ( img_new ,keypoints_new );
+
+    descriptor->compute ( img_new, keypoints_new, descriptors_new);
+
+   if(init){
+    init = false;
+   }else if(keypoints_old.size() > 0 && keypoints_new.size() > 0){
+
+    std::vector<DMatch> matches;
+
+    matcher->match ( descriptors_old, descriptors_new, matches );
+
+    // find the keypoints and descriptors with ORB
+    // TODO filtrar pontos pelo quao distinguishable sao
+    //tendo a covariancia dos dois sensores no ponto especifico, calculo o que e que seria o ponto real tendo em conta essas duas covariancia (formulas do filtro de kalman, estado e observaçao xy)
+    detector->detect(img_new, keypoints_new);
+    Mat img_match;
+    drawMatches ( img_old, keypoints_old, img_new, keypoints_new, matches, img_match );
+    resize(img_match, img_match, cv::Size(img_match.cols/2, img_match.rows/2));
+  //  imshow ( "所有匹配点对", img_match );
+  //  waitKey(1);
+   }
+    //TODO GET DESCRIPTORS
+  //  Mat im_with_keypoints;
+  //  drawKeypoints( img_new, keypoints_keypoints, im_with_keypoints, Scalar(255,0,0), DrawMatchesFlags::DEFAULT );
+    
+    // do matching if not init
+    
+    // update new and old image
+    img_old = img_new.clone();
+    keypoints_old = keypoints_new;
+    descriptors_old = descriptors_new;
+
+  //  resize(im_with_keypoints, im_with_keypoints, cv::Size(im_with_keypoints.cols/2, im_with_keypoints.rows/2));
+  //  resize(img_new, img_new, cv::Size(img_new.cols/2, img_new.rows/2));
      
   //  imshow("keypoints", im_with_keypoints);
   //  waitKey(1);
@@ -264,52 +336,28 @@ void cb_depth( const sensor_msgs::Image &msg){
  //   waitKey(1);
 
 }
-void cb_scan (const sensor_msgs::LaserScanConstPtr& scan_in)
-{
 
-laser_geometry::LaserProjection projector_;
-tf::TransformListener listener_;
-
-  if(!listener_.waitForTransform(
-        scan_in->header.frame_id,
-        "d435_color_optical_frame",
-        scan_in->header.stamp + ros::Duration().fromSec(scan_in->ranges.size()*scan_in->time_increment),
-        ros::Duration(1.0))){
-     return;
-  }
-
-  sensor_msgs::PointCloud2 cloud;
-  projector_.transformLaserScanToPointCloud("d435_color_optical_frame",*scan_in,
-          cloud,listener_);
-  ros::Time time_st = ros::Time::now ();
-  cloud.header.stamp = time_st;
-  pub_cloud_lidar.publish(cloud);        
-
-  // Do something with cloud.
-}
 int main(int argc, char **argv)
 {
+    init = true;
     ros::init(argc, argv, "test");
     ros::NodeHandle nh;
     get_depth_camera_info();
     get_color_camera_info();
     //  ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cb_pcl);
     pub_cloud_depth = nh.advertise<sensor_msgs::PointCloud2> ("points_depth", 1);
-    pub_cloud_lidar = nh.advertise<sensor_msgs::PointCloud2> ("points_lidar", 1);
 
     ros::Subscriber rgb_sub = nh.subscribe("d435/color/image_raw", 1, cb_rgb);
 
-    message_filters::Subscriber<sensor_msgs::ImageConstPtr> cloud_depth_sub(nh, "/d435/aligned_depth_to_color/image_raw", 1);
+    message_filters::Subscriber<sensor_msgs::Image> cloud_depth_sub(nh, "/d435/aligned_depth_to_color/image_raw", 1);
     message_filters::Subscriber<sensor_msgs::LaserScan> lidar_sub(nh, "scan", 1);
 
-    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::LaserScan> MySyncPolicy;
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::LaserScan> MySyncPolicy;
     
     message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), cloud_depth_sub, lidar_sub);
 
     sync.registerCallback(boost::bind(&cb_align, _1, _2));
-    
-  //  ros::Subscriber aligned_sub = nh.subscribe("/d435/aligned_depth_to_color/image_raw", 1, cb_align);
-  //  ros::Subscriber scan_sub = nh.subscribe("scan", 1, cb_scan);
+  
     std::cout << "o que e que se passa" << std::endl;
     while (ros::ok())
     {
